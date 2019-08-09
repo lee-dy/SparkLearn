@@ -1,1 +1,5 @@
-1.
+首先安装配置jdk,因为之前安装过Eclipse，所以配置过java环境了
+下载安装spark，在官网下载的2.4.3版本，然后设置SPARK_HOME、path等
+安装hadoop3.2.0，设置好环境变量，修改配置文件，初始化
+成功启动Spark，没遇到什么大问题
+然后使用python进行WordCount，我的python是3.6版本的，之前装了Anaconda3，ide用的pycharm
