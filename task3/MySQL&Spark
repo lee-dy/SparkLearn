@@ -1,0 +1,62 @@
+# 创建mysql表
+mysql> create database spark;
+mysql> use spark;
+mysql> create table student (id int(4), name char(20), gender char(4), age int(4));
+mysql> alter table student change id id int auto_increment primary key;
+mysql> insert into student values(1,'Xueqian','F',23);
+mysql> insert into student values(2,'Weiliang','M',24);
+mysql> select * from student;
++----+----------+--------+------+
+| id | name     | gender | age  |
++----+----------+--------+------+
+|  1 | Xueqian  | F      |   23 |
+|  2 | Weiliang | M      |   24 |
++----+----------+--------+------+
+2 rows in set (0.00 sec)
+# 下载解压mysql-connector-java-8.0.17.zip
+# 选的Platform Independent 
+# 启动spark
+pyspark --jars D:\Eclipse\mysql-connector-java-8.0.17\mysql-connector-java-8.0.17.jar
+ --driver-class-path D:\Eclipse\mysql-connector-java-8.0.17\mysql-connector-java-8.0.17.jar
+# 读取表格
+from pyspark import SparkConf, SparkContext
+from pyspark.sql import SQLContext
+
+conf = SparkConf().setMaster("local").setAppName("My App")
+sc = SparkContext(conf=conf)
+
+sqlContext=SQLContext(sc)
+# 一定要指定serverTimezone=UTC，感谢https://blog.csdn.net/mjlfto/article/details/74906163
+jdbcDF = sqlContext.read.format("jdbc").options(url="jdbc:mysql://localhost:3306/spark?serverTimezone=UTC",
+                                driver='com.mysql.jdbc.Driver',dbtable="student", user="root", password="YourPassword").load()
+jdbcDF.show()
+# 修改表格
+>>> from pyspark.sql.types import Row
+>>> from pyspark.sql.types import StructType
+>>> from pyspark.sql.types import StructField
+>>> from pyspark.sql.types import StringType
+>>> from pyspark.sql.types import IntegerType
+>>> studentRDD = spark.sparkContext.parallelize(["3 Rongcheng M 26","4 Guanhua M 27"]).map(lambda line : line.split(" "))
+//下面要设置模式信息
+>>> schema = StructType([StructField("name", StringType(), True),StructField("gender", StringType(), True),StructField("age",IntegerType(), True)])
+>>> rowRDD = studentRDD.map(lambda p : Row(p[1].strip(), p[2].strip(),int(p[3])))
+//建立起Row对象和模式之间的对应关系，也就是把数据和模式对应起来
+>>> studentDF = spark.createDataFrame(rowRDD, schema)
+>>> prop = {}
+>>> prop['user'] = 'root'
+>>> prop['password'] = '123456'
+>>> prop['driver'] = "com.mysql.jdbc.Driver"
+>>> studentDF.write.jdbc("jdbc:mysql://localhost:3306/spark?serverTimezone=UTC",'student','append', prop)
+
+# 更改后的表
+mysql> use spark
+Database changed
+mysql> select * from student;
++----+-----------+--------+------+
+| id | name      | gender | age  |
++----+-----------+--------+------+
+|  1 | Xueqian   | F      |   23 |
+|  2 | Weiliang  | M      |   24 |
+|  3 | Rongcheng | M      |   26 |
+|  4 | Guanhua   | M      |   27 |
++----+-----------+--------+------+
