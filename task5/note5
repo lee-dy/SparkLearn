@@ -1,0 +1,69 @@
+# 二分类
+from pyspark.sql import Row,functions
+from pyspark.ml.linalg import Vector,Vectors
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.ml import Pipeline
+from pyspark.ml.feature import IndexToString, StringIndexer, VectorIndexer,HashingTF, Tokenizer
+from pyspark.ml.classification import LogisticRegression,LogisticRegressionModel,BinaryLogisticRegressionSummary, LogisticRegression
+
+def f(x):
+    rel = {}
+    rel['features'] = Vectors.dense(float(x[0]),float(x[1]),float(x[2]),float(x[3]))
+    rel['label'] = str(x[4])
+    return rel
+ 
+data = spark.sparkContext.textFile("file:///usr/local/spark/iris.txt").map(lambda line: line.split(',')).map(lambda p: Row(**f(p))).toDF()
+
+data.createOrReplaceTempView("iris")
+df = spark.sql("select * from iris where label != 'Iris-setosa'")
+rel = df.map(lambda t : str(t[1])+":"+str(t[0])).collect()
+for item in rel:
+            print(item)
+           
+labelIndexer = StringIndexer().setInputCol("label").setOutputCol("indexedLabel").fit(df)
+featureIndexer = VectorIndexer().setInputCol("features").setOutputCol("indexedFeatures").fit(df)
+featureIndexer: org.apache.spark.ml.feature.VectorIndexerModel = vecIdx_53b988077b38
+
+trainingData, testData = df.randomSplit([0.7,0.3])
+
+lr = LogisticRegression().setLabelCol("indexedLabel").setFeaturesCol("indexedFeatures").setMaxIter(10).setRegParam(0.3).setElasticNetParam(0.8)
+print("LogisticRegression parameters:\n" + lr.explainParams())
+ 
+ ######
+LogisticRegression parameters:
+aggregationDepth: suggested depth for treeAggregate (>= 2). (default: 2)
+elasticNetParam: the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty. (default: 0.0, current: 0.8)
+family: The name of family which is a description of the label distribution to be used in the model. Supported options: auto, binomial, multinomial (default: auto)
+featuresCol: features column name. (default: features, current: indexedFeatures)
+fitIntercept: whether to fit an intercept term. (default: True)
+labelCol: label column name. (default: label, current: indexedLabel)
+maxIter: max number of iterations (>= 0). (default: 100, current: 10)
+predictionCol: prediction column name. (default: prediction)
+probabilityCol: Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities. (default: probability)
+rawPredictionCol: raw prediction (a.k.a. confidence) column name. (default: rawPrediction)
+regParam: regularization parameter (>= 0). (default: 0.0, current: 0.3)
+standardization: whether to standardize the training features before fitting the model. (default: True)
+threshold: Threshold in binary classification prediction, in range [0, 1]. If threshold and thresholds are both set, they must match.e.g. if threshold is p, then thresholds must be equal to [1-p, p]. (default: 0.5)
+thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0, excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold. (undefined)
+tol: the convergence tolerance for iterative algorithms (>= 0). (default: 1e-06)
+weightCol: weight column name. If this is not set or empty, we treat all instance weights as 1.0. (undefined)
+######
+
+labelConverter = IndexToString().setInputCol("prediction").setOutputCol("predictedLabel").setLabels(labelIndexer.labels)
+
+lrPipeline =  Pipeline().setStages([labelIndexer, featureIndexer, lr, labelConverter])
+lrPipelineModel = lrPipeline.fit(trainingData)
+
+lrPredictions = lrPipelineModel.transform(testData)
+
+preRel = lrPredictions.select("predictedLabel", "label", "features", "probability").collect()
+for item in preRel:
+    print(str(item['label'])+','+str(item['features'])+'-->prob='+str(item['probability'])+',predictedLabel'+str(item['predictedLabel']))
+
+evaluator = MulticlassClassificationEvaluator().setLabelCol("indexedLabel").setPredictionCol("prediction")
+lrAccuracy = evaluator.evaluate(lrPredictions)
+print("Test Error = " + str(1.0 - lrAccuracy))
+
+lrModel = lrPipelineModel.stages[2]
+print("Coefficients: " + str(lrModel.coefficients)+"Intercept: "+str(lrModel.intercept)+"numClasses: "+str(lrModel.numClasses)+"numFeatures: "+str(lrModel.numFeatures))
+
